@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Happy Birthday, Chootu! 🎂</title>
+  <title>Happy Birthday, Chootu! 💖</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎂</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display:ital,wght@1,400;1,700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -481,33 +482,33 @@
       Click any slot to add your favorite photo
     </p>
     <div class="photo-grid" id="photoGrid">
-      <div class="photo-slot" onclick="pickPhoto(this)">
+      <div class="photo-slot" data-slot="0" onclick="pickPhoto(this)">
         <div class="photo-placeholder"><span class="icon">🌸</span><span>Add a photo</span></div>
         <div class="photo-label">Our First Memory</div>
       </div>
-      <div class="photo-slot" onclick="pickPhoto(this)">
+      <div class="photo-slot" data-slot="1" onclick="pickPhoto(this)">
         <div class="photo-placeholder"><span class="icon">💕</span><span>Add a photo</span></div>
         <div class="photo-label">Always Together</div>
       </div>
-      <div class="photo-slot" onclick="pickPhoto(this)">
+      <div class="photo-slot" data-slot="2" onclick="pickPhoto(this)">
         <div class="photo-placeholder"><span class="icon">🌹</span><span>Add a photo</span></div>
         <div class="photo-label">A Day to Remember</div>
       </div>
-      <div class="photo-slot" onclick="pickPhoto(this)">
+      <div class="photo-slot" data-slot="3" onclick="pickPhoto(this)">
         <div class="photo-placeholder"><span class="icon">✨</span><span>Add a photo</span></div>
         <div class="photo-label">Pure Happiness</div>
       </div>
-      <div class="photo-slot" onclick="pickPhoto(this)">
+      <div class="photo-slot" data-slot="4" onclick="pickPhoto(this)">
         <div class="photo-placeholder"><span class="icon">🎀</span><span>Add a photo</span></div>
         <div class="photo-label">My Favourite Smile</div>
       </div>
-      <div class="photo-slot" onclick="pickPhoto(this)">
+      <div class="photo-slot" data-slot="5" onclick="pickPhoto(this)">
         <div class="photo-placeholder"><span class="icon">💖</span><span>Add a photo</span></div>
         <div class="photo-label">Forever Us</div>
       </div>
     </div>
     <input type="file" id="photoInput" accept="image/*" style="display:none" />
-    <p class="gallery-hint">Photos stay in this browser session — replace them anytime ✨</p>
+    <p class="gallery-hint">Photos are saved forever — they'll be here every time you visit 💖</p>
   </section>
 
   <div class="divider"></div>
@@ -806,30 +807,70 @@ function blowCandles() {
 /* ════════════════════════════════════════════
    PHOTO GALLERY
 ════════════════════════════════════════════ */
-let currentSlot = null;
+let currentSlotEl = null;
 const photoInput = document.getElementById('photoInput');
 
-function pickPhoto(slot) {
-  currentSlot = slot;
+function pickPhoto(slotEl) {
+  currentSlotEl = slotEl;
   photoInput.value = '';
   photoInput.click();
 }
 
-photoInput.addEventListener('change', function () {
-  if (!this.files || !this.files[0] || !currentSlot) return;
-  const url = URL.createObjectURL(this.files[0]);
-  const placeholder = currentSlot.querySelector('.photo-placeholder');
-  let img = currentSlot.querySelector('img');
+function setSlotPhoto(slotEl, url) {
+  const placeholder = slotEl.querySelector('.photo-placeholder');
+  let img = slotEl.querySelector('img');
   if (!img) {
     img = document.createElement('img');
-    currentSlot.insertBefore(img, placeholder);
+    slotEl.insertBefore(img, placeholder);
   }
-  img.onload = () => {
-    img.classList.add('loaded');
-    if (placeholder) placeholder.style.display = 'none';
-  };
+  img.onload = () => { img.classList.add('loaded'); if (placeholder) placeholder.style.display = 'none'; };
   img.src = url;
+}
+
+photoInput.addEventListener('change', async function () {
+  if (!this.files || !this.files[0] || !currentSlotEl) return;
+  const file = this.files[0];
+  const slotEl = currentSlotEl;
+  const slotIdx = slotEl.dataset.slot ?? '0';
+  const placeholder = slotEl.querySelector('.photo-placeholder');
+
+  // Optimistic preview
+  const localUrl = URL.createObjectURL(file);
+  setSlotPhoto(slotEl, localUrl);
+
+  // Show uploading state in label
+  if (placeholder) { placeholder.querySelector('.icon').textContent = '⏳'; placeholder.querySelector('span').textContent = 'Saving…'; }
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, 'x-slot': slotIdx },
+      body: file,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    const { url } = await res.json();
+    // Swap to the permanent blob URL
+    const img = slotEl.querySelector('img');
+    if (img) img.src = url;
+  } catch {
+    // Keep local preview but note it won't persist
+    if (placeholder) { placeholder.querySelector('.icon').textContent = '⚠️'; placeholder.querySelector('span').textContent = 'Not saved'; placeholder.style.display = ''; }
+  }
 });
+
+async function loadPhotos() {
+  try {
+    const res = await fetch('/api/photos');
+    if (!res.ok) return;
+    const photos = await res.json();
+    document.querySelectorAll('.photo-slot').forEach(slotEl => {
+      const url = photos[slotEl.dataset.slot];
+      if (url) setSlotPhoto(slotEl, url);
+    });
+  } catch {}
+}
+
+loadPhotos();
 
 /* ════════════════════════════════════════════
    HAPPY BIRTHDAY MUSIC (Web Audio API)
